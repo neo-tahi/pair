@@ -1,0 +1,81 @@
+#!/usr/bin/env sh
+set -e
+author=$1
+committer=$2
+
+pairs_file="$HOME/.current_pair"
+
+if [ -f $pairs_file ] 
+then
+  rm $pairs_file
+fi
+
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  echo "Usage: pair <author> <comitter>"
+  exit -1
+fi
+
+for user in $author $committer; do
+  if [ -n ${user} ]; then
+    tmpfile="$HOME/.git_pair_cache/" 
+
+    if ! [ -d  $tmpfile ]; then
+      mkdir -p "$tmpfile"
+    fi
+
+    # echo "tmpfile $tmpfile"
+    user_cache="${tmpfile}${user}" 
+    # echo "user cache for $user: $user_cache" 
+
+    if ! [ -f "${user_cache}" ]
+    then
+      status="$(curl -o ${user_cache} -w '%{http_code}' \
+        -s https://api.github.com/users/${user})"
+      if ! [ $status == '200' ]; then
+        echo "Unable to find user $user"
+        rm ${user_cache}
+        exit $status
+      fi
+    fi
+
+    api_response=$( cat ${user_cache} )
+
+    email=$(node -pe 'JSON.parse(process.argv[1]).email' "$api_response")
+    name=$(node -pe 'JSON.parse(process.argv[1]).name' "$api_response")
+
+    if [ "$email" == 'null' ]; then
+      echo "No github public email for $user" 
+      exit 2
+    fi
+
+    if [ "$name" == 'null' ]; then
+      # fall back to login
+      name=$(node -pe 'JSON.parse(process.argv[1]).login' "$api_response")
+    fi
+
+    echo >> $pairs_file
+
+    echo $name $email
+
+    if [ $user == $author ]; then
+      git config --global --replace-all user.name $name
+      git config --global --replace-all user.email $email
+      echo "export GIT_AUTHOR_NAME=\"$name\"" >> $pairs_file
+      echo "export GIT_AUTHOR_EMAIL=\"$email\"" >> $pairs_file
+    elif [ $user == $committer ]; then
+      echo "export GIT_COMMITTER_NAME=\"$name\"" >> $pairs_file
+      echo "export GIT_COMMITTER_EMAIL=\"$email\"" >> $pairs_file
+    fi
+  fi
+done
+
+echo "export GIT_PAIR_LOADED=true" >> $pairs_file
+
+if [ ! $GIT_PAIR_LOADED ]; then
+  echo "Add the following to your shell configuration and reload:"
+  echo
+  echo "[ -f ${pairs_file} ] && source $pairs_file"
+else
+  echo "Please open new session to enable git vars"
+fi
+
