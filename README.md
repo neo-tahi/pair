@@ -1,4 +1,4 @@
-DEPRICATED - This project has moved:
+DEPRECATED - This project has moved:
 
 https://github.com/Tahi-project/dotfiles/commit/c845d9151c5f7234d9b05bc7c3bff37329b869b2
 
